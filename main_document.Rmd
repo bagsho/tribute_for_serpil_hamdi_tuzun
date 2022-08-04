@@ -1,0 +1,225 @@
+---
+title: "A tribute to Serpil Hamdi Tüzün"
+author: "by Orhan Aktas"
+date: '2022-08-04'
+output:   
+    html_document:
+      df_print: !expr knitr::kable
+      toc: yes
+      number_sections: yes
+      toc_depth: 2
+---
+
+```{r setup, include=FALSE,echo=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  class.source = "bg-warning text-warning"
+)
+```
+
+#### Required Libraries {.unlisted .unnumbered}
+
+```{r libraries, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(readxl)
+library(rvest)
+library(ggthemes)
+
+
+```
+
+# Introduction
+
+# get year by year squad data from transfermarkt
+
+function definition
+```{r}
+my_function <- function(year) {
+  
+  preurl<-"https://www.transfermarkt.com.tr/be%C5%9Fikta%C5%9F-jk/kader/verein/114/plus/1/galerie/0?saison_id="
+  url <- paste0(preurl,as.character(year))
+  scraped_url <- read_html(url)
+  
+  PlayerNames_bjk  <- scraped_url %>% 
+    html_nodes(".hauptlink a") %>% 
+    html_text() %>% 
+    as_tibble() %>% 
+    rename(names=value) %>% 
+    mutate(names=str_trim(names))
+  
+  Playerages_bjk  <- scraped_url %>% 
+    html_nodes("#yw1 td:nth-child(3)") %>% 
+    html_text() %>% 
+    as_tibble() %>% 
+    rename(ages=value) 
+  
+  Playerdates_bjk  <- scraped_url %>% 
+    html_nodes("td:nth-child(8)") %>% 
+    html_text() %>% 
+    as_tibble()%>% 
+    rename(joined_date=value)
+  
+  Playerpreteams_bjk  <- scraped_url %>% 
+    html_nodes("td:nth-child(9)") %>% html_element("a") %>% 
+    html_attr("title") %>% 
+    as_tibble() %>% 
+    mutate(pre_team=str_sub(value, 1, str_locate(value,": Ablöse") [,"start"]-1)) %>% 
+    select(-value)
+  
+  tibble(PlayerNames_bjk,Playerages_bjk,Playerdates_bjk,Playerpreteams_bjk) 
+}
+```
+
+define years
+```{r}
+years <- 1969:2021
+```
+
+
+scrape the data and write to a local file
+```{r eval=FALSE}
+squads <- years %>%
+  map(my_function) %>%
+  set_names(years)
+
+write_rds(squads,"data/squads.rds")
+rm(squads)
+```
+
+read squad data from local file
+```{r}
+squads<-read_rds("data/squads.rds")
+```
+
+add age joined to the club
+```{r}
+
+add_age_joined <- function(squad) {
+  squad %>% 
+    mutate(ages=str_replace(ages, "\\s*\\([^\\)]+\\)", "")) %>% 
+    mutate(year_born=as.integer(str_sub(ages, -4)),
+         year_joined=as.integer(str_sub(joined_date, -4)),
+         age_joined=year_joined-year_born) %>%  
+    select(age_joined)
+}
+
+squads2<-squads %>% map(add_age_joined)
+
+```
+
+
+visualize ozkaynak based 
+```{r}
+ozk_oyuncu<- squads %>% 
+  map(mutate,Ozkaynak=ifelse(grepl('Beşiktaş', pre_team)==TRUE,1,0)) %>% 
+  map(summarise,sum(Ozkaynak)) %>% 
+  bind_rows() %>% 
+  bind_cols(years %>% as_tibble) %>% 
+  set_names("Ozkaynak","year") %>% 
+  relocate(year) 
+
+ozk_oyuncu %>%  ggplot(aes(x=year))+
+                  geom_col(aes(y=Ozkaynak))
+```
+
+visualize number of players who joined to the club before age of 22
+```{r}
+oyuncu_22<- squads2 %>% 
+  map(mutate,youth=ifelse(age_joined<22,1,0)) %>% 
+  map(summarise,sum(youth,na.rm = TRUE)) %>% 
+  bind_rows() %>% 
+  bind_cols(years %>% as_tibble) %>% 
+  set_names("youth","year") %>% 
+  relocate(year) 
+
+oyuncu_22 %>%  ggplot(aes(x=year))+
+                  geom_col(aes(y=youth))
+```
+
+# get year by year season data from wikipedia and join with the previous
+```{r eval=FALSE}
+wiki_url<-"https://tr.wikipedia.org/wiki/Be%C5%9Fikta%C5%9F_(futbol_tak%C4%B1m%C4%B1)_sezonlar%C4%B1_listesi"
+scraped_wiki_url <- read_html(wiki_url)
+
+scraped_wiki_url %>%
+  html_nodes(".wikitable:nth-child(9) td:nth-child(9) , .wikitable:nth-child(9) td:nth-child(8), .wikitable:nth-child(9) td:nth-child(7), .wikitable:nth-child(9) td:nth-child(6), .wikitable:nth-child(9) td:nth-child(5), .wikitable:nth-child(9) td:nth-child(4), .wikitable:nth-child(9) td:nth-child(3), :nth-child(9) th:nth-child(1) a") %>%
+  html_text() %>%
+  as_tibble() %>%
+  bind_cols(rep(c("year", "O", "G", "B", "M", "A", "Y", "PUAN"), 62)) %>%
+  bind_cols(ceiling(1:(8 * 62) / 8)) %>%
+  set_names("value", "var", "id") %>%
+  mutate(value = str_trim(value)) %>%
+  pivot_wider(names_from = var, values_from = value) %>%
+  slice(6:n()) %>%
+  rename(sezon = year, year = id) %>%
+  mutate(year = as.integer(year + 1957))%>%
+  rows_update(tibble(
+    year = 2011, sezon = "2011-12", O = "40", G = "16", B = "12", M = "12", A = "55", Y = "47", PUAN = "60"
+  ),
+   by="year"
+  ) %>% 
+  mutate_at(vars(O:PUAN), as.integer) %>% 
+  mutate(PuanOrt=(G*3+B)/O) %>% 
+  mutate(tuzun=ifelse(year>1974&year<1990,1,0),
+         seba=ifelse(year>1983&year<2000,1,0),
+         gordon=ifelse(year>1986&year<1994,1,0)) %>% 
+  left_join(ozk_oyuncu,by="year") %>% 
+  left_join(oyuncu_22,by="year") %>% 
+  write_rds("data/main_table.rds")
+
+
+```
+
+read squad data from local file
+```{r}
+main_table<-read_rds("data/main_table.rds")
+```
+
+
+visualize
+```{r}
+main_table %>% 
+  filter(year>1970&year<2000)%>%
+  mutate(GoalOrt=A/O) %>% 
+  ggplot(aes(x=year))+
+    geom_col(aes(y=Ozkaynak),fill="black")+
+    geom_col(aes(y=youth),fill="black",alpha=0.5)+
+    geom_line(aes(y=PuanOrt*5),col="red",size=2)+
+    geom_segment(
+      data=main_table %>% filter(tuzun==1),
+      aes(x=min(year), y=1, xend=max(year), yend=1), 
+      color="#FC4E07", 
+      size=3,
+      lineend ="round")+
+    geom_label(data=main_table %>% filter(tuzun==1),
+               aes(label=str_wrap("Serpil Hamdi Tüzün",20), x=mean(year),y=1), 
+               size=3,
+               alpha=0.2) +
+    geom_segment(
+      data=main_table %>% filter(seba==1),
+      aes(x=min(year), y=2, xend=max(year), yend=2), 
+      color="#00AFBB", 
+      size=3,
+      lineend ="round")+
+    geom_label(data=main_table %>% filter(seba==1),
+             aes(label=str_wrap("Süleyman Seba",20), x=mean(year),y=2), 
+             size=3,
+             alpha=0.2) +
+    geom_segment(
+      data=main_table %>% filter(gordon==1),
+      aes(x=min(year), y=3, xend=max(year), yend=3), 
+      color="#E7B800", 
+      size=3,
+      lineend ="round")+ 
+    geom_label(data=main_table %>% filter(gordon==1),
+           aes(label=str_wrap("Gordon Milne",20), x=mean(year),y=3), 
+           size=3,
+           alpha=0.2) +
+  theme_minimal()
+    #scale_x_continuous(breaks=seq(1971,1999,1))+
+    #theme(axis.text.x =element_text( angle=90))
+  
+```
+
