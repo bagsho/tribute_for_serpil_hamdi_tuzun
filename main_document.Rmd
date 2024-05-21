@@ -26,7 +26,8 @@ library(tidyverse)
 library(readxl)
 library(rvest)
 library(ggthemes)
-
+library(ggtext)
+library(tidyquant)
 
 ```
 
@@ -186,40 +187,139 @@ main_table %>%
   ggplot(aes(x=year))+
     geom_col(aes(y=Ozkaynak),fill="black")+
     geom_col(aes(y=youth),fill="black",alpha=0.5)+
-    geom_line(aes(y=PuanOrt*5),col="red",size=2)+
-    geom_segment(
+    geom_line(aes(y=(PuanOrt-1)*10),col="red",size=2)+
+    # serpil hamdi tuzun era
+    geom_errorbarh(
       data=main_table %>% filter(tuzun==1),
-      aes(x=min(year), y=1, xend=max(year), yend=1), 
-      color="#FC4E07", 
-      size=3,
-      lineend ="round")+
+      aes(xmax = max(year), xmin = min(year), y=1, height = .2),
+      color="red")+
     geom_label(data=main_table %>% filter(tuzun==1),
                aes(label=str_wrap("Serpil Hamdi Tüzün",20), x=mean(year),y=1), 
                size=3,
                alpha=0.2) +
-    geom_segment(
+    # suleyman seba era
+    geom_errorbarh(
       data=main_table %>% filter(seba==1),
-      aes(x=min(year), y=2, xend=max(year), yend=2), 
-      color="#00AFBB", 
-      size=3,
-      lineend ="round")+
+      aes(xmax = max(year), xmin = min(year), y=2, height = .2),
+      color="red")+
     geom_label(data=main_table %>% filter(seba==1),
              aes(label=str_wrap("Süleyman Seba",20), x=mean(year),y=2), 
              size=3,
              alpha=0.2) +
-    geom_segment(
+    # gordon milne era
+    geom_errorbarh(
       data=main_table %>% filter(gordon==1),
-      aes(x=min(year), y=3, xend=max(year), yend=3), 
-      color="#E7B800", 
-      size=3,
-      lineend ="round")+ 
+      aes(xmax = max(year), xmin = min(year), y=3, height = .2),
+      color="red")+
     geom_label(data=main_table %>% filter(gordon==1),
            aes(label=str_wrap("Gordon Milne",20), x=mean(year),y=3), 
            size=3,
            alpha=0.2) +
-  theme_minimal()
-    #scale_x_continuous(breaks=seq(1971,1999,1))+
+  theme_minimal()+
+  # 
+    scale_x_continuous(breaks=seq(1971,1999,1),labels=as.character(71:99)) 
+
     #theme(axis.text.x =element_text( angle=90))
   
+```
+
+```{r}
+positions_by_year <- read_excel("C:/Users/user/Desktop/positions_by_year.xlsx")
+
+positions_by_year %>% 
+  ggplot(aes(x=year,y=position))+
+    geom_line(size=2,alpha=0.7)+
+    geom_ma(ma_fun = SMA, n = 3) + 
+    theme_minimal() +
+    scale_y_continuous(breaks=seq(11, 1, -1),trans = "reverse") +   
+
+  theme(legend.position="none")+
+  theme(
+          panel.background = element_blank(),    
+          axis.text.y = element_text(angle = 0, vjust = -.5, 
+                                     margin = margin(r = -30)),
+          panel.grid.minor = element_blank(),
+          panel.grid.major.x = element_blank(),
+          panel.grid.major.y = element_line(colour = 'light grey', 
+                                          linetype = 'dashed',size = .35),
+          axis.ticks.x = element_line(color = "light grey"),
+          axis.ticks.y = element_blank(),
+          axis.line.x = element_line(colour = "light grey", linetype = "solid",
+                                     size = .5))+
+  # annotations: 
+  
+  ## Serpil Hamdi Tüzün
+  annotate("richtext", 
+           label = "Serpil Hamdi<br>Tüzün",
+           x = 1967, y = 10, size = 5, color = "black",
+           label.colour = NA, fill = NA) +
+  annotate(geom = "point", x = 1975, y = 11, colour = "black", size = 3)+
+  annotate("curve",
+           x = 1975, xend = 1969, 
+           y = 11, yend = 10,
+           color = "black", size = 1, 
+    curvature = -.3, arrow = arrow(length = unit(2, "mm")))+
+  
+  
+  ## Süleyman Seba
+  annotate("richtext", 
+           label = "Süleyman<br>Seba",
+           x = 1985, y = 8, size = 5, color = "black",
+           label.colour = NA, fill = NA) +
+  annotate(geom = "point", x = 1984, y = 2, colour = "black", size = 3)+
+  annotate("curve",
+           x = 1984, xend = 1985, 
+           y = 2, yend = 7.5,
+           color = "black", size = 1, 
+    curvature = -.2, arrow = arrow(length = unit(2, "mm")))+
+  
+  ## Gordon Milne
+  annotate("richtext", 
+           label = "Gordon<br>Milne",
+           x = 1990, y = 6, size = 5, color = "black",
+           label.colour = NA, fill = NA) +
+  annotate(geom = "point", x = 1987, y = 2, colour = "black", size = 3)+
+  annotate("curve",
+           x = 1987, xend = 1990, 
+           y = 2, yend = 5.5,
+           color = "black", size = 1, 
+    curvature = -.2, arrow = arrow(length = unit(2, "mm")))
+
+
+
+
+```
+same values with a new chart similar to the transfmarkt's
+
+
+```{r}
+# with serpil hamdi tüzün era
+positions_by_year %>% 
+  ggplot(aes(x=year,y=position))+
+    #geom_rect(aes(xmin = 1975,xmax = 1990,ymin = - Inf,ymax = Inf,  fill = "red"),alpha=0.1) +
+    #geom_line(size=2,alpha=0.7)+
+  #   geom_ma(ma_fun = SMA, n = 3,col="red") + 
+  # geom_ma(ma_fun = SMA, n = 5,col="blue") +
+  geom_ma(ma_fun = SMA, n = 7,col="green") +
+    theme_minimal() +
+    scale_y_continuous(breaks=seq(11, 1, -1),trans = "reverse") +   
+
+  theme(legend.position="none")+
+  theme(
+          panel.background = element_blank(),    
+          axis.text.y = element_text(angle = 0, vjust = -.5, 
+                                     margin = margin(r = -30)),
+          panel.grid.minor = element_blank(),
+          panel.grid.major.x = element_blank(),
+          panel.grid.major.y = element_line(colour = 'light grey', 
+                                          linetype = 'dashed',size = .35),
+          axis.ticks.x = element_line(color = "light grey"),
+          axis.ticks.y = element_blank(),
+          axis.line.x = element_line(colour = "light grey", linetype = "solid",
+                                     size = .5))
+```
+u-19 milli takım
+```{r}
+
 ```
 
